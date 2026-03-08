@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PlantCare AI — Disease Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --soil:  #1a1208;
+      --moss:  #2a3d1c;
+      --leaf:  #4a7c35;
+      --lime:  #8bc34a;
+      --amber: #f4a228;
+      --rust:  #c0392b;
+      --sky:   #7ab8d4;
+      --light: #f9f6f0;
+    }
+
+    html { scroll-behavior: smooth; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--light); color: var(--soil); min-height: 100vh; overflow-x: hidden; }
+
+    /* Background */
+    .bg-canvas {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 40% at 10% 20%, rgba(74,124,53,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 60% at 90% 80%, rgba(139,195,74,0.05) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 50% at 50% 50%, rgba(212,232,194,0.08) 0%, transparent 70%);
+    }
+    .leaf-deco { position: fixed; pointer-events: none; z-index: 0; opacity: 0.04; font-size: 200px; user-select: none; }
+    .leaf-deco.one { top: -60px; right: -40px; transform: rotate(30deg); }
+    .leaf-deco.two { bottom: -80px; left: -60px; transform: rotate(-20deg); font-size: 260px; }
+
+    /* Header */
+    header {
+      position: relative; z-index: 10;
+      padding: 28px 48px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid rgba(74,124,53,0.12);
+      background: rgba(249,246,240,0.9);
+      backdrop-filter: blur(12px);
+    }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--leaf), var(--lime));
+      border-radius: 10px; display: grid; place-items: center;
+      font-size: 20px; box-shadow: 0 4px 16px rgba(74,124,53,0.25);
+    }
+    .logo-text { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: var(--moss); letter-spacing: -0.3px; }
+    .logo-text span { color: var(--lime); }
+    nav { display: flex; gap: 24px; align-items: center; }
+    nav a { font-size: 13px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; color: var(--moss); text-decoration: none; opacity: 0.7; transition: opacity 0.2s; }
+    nav a:hover { opacity: 1; }
+    .badge-demo {
+      background: var(--amber); color: #fff;
+      font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
+      padding: 3px 10px; border-radius: 20px; text-transform: uppercase;
+      display: {% if demo_mode %}flex{% else %}none{% endif %};
+    }
+    .badge-live {
+      background: var(--leaf); color: #fff;
+      font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
+      padding: 3px 10px; border-radius: 20px; text-transform: uppercase;
+      display: {% if not demo_mode %}flex{% else %}none{% endif %};
+      align-items: center; gap: 5px;
+    }
+    .badge-live::before { content: '●'; font-size: 7px; animation: pulse 2s infinite; }
+
+    /* Hero */
+    .hero { position: relative; z-index: 5; text-align: center; padding: 72px 48px 48px; }
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(74,124,53,0.08); border: 1px solid rgba(74,124,53,0.15);
+      border-radius: 100px; padding: 6px 16px;
+      font-size: 12px; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; color: var(--leaf);
+      margin-bottom: 24px;
+    }
+    .hero-tag::before { content: '●'; font-size: 8px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    h1 { font-family: 'Playfair Display', serif; font-size: clamp(42px, 6vw, 72px); font-weight: 900; line-height: 1.05; color: var(--soil); letter-spacing: -1.5px; margin-bottom: 20px; }
+    h1 em { font-style: normal; color: var(--leaf); }
+    .hero-sub { max-width: 540px; margin: 0 auto 12px; font-size: 17px; line-height: 1.7; color: rgba(26,18,8,0.6); font-weight: 300; }
+
+    .stats-row { display: flex; justify-content: center; gap: 48px; margin-top: 36px; padding-top: 28px; border-top: 1px solid rgba(74,124,53,0.1); }
+    .stat { text-align: center; }
+    .stat-num { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: var(--leaf); }
+    .stat-label { font-size: 11px; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(26,18,8,0.45); margin-top: 2px; }
+
+    /* Layout */
+    .main-container {
+      position: relative; z-index: 5; max-width: 1080px; margin: 0 auto;
+      padding: 0 48px 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start;
+    }
+    @media (max-width: 768px) {
+      .main-container { grid-template-columns: 1fr; padding: 0 24px 60px; }
+      header { padding: 20px 24px; }
+      .hero { padding: 48px 24px 32px; }
+      .stats-row { gap: 24px; }
+    }
+
+    /* Cards */
+    .card { background: #fff; border: 1px solid rgba(74,124,53,0.1); border-radius: 20px; overflow: hidden; box-shadow: 0 2px 20px rgba(26,18,8,0.04); transition: box-shadow 0.3s; }
+    .card:hover { box-shadow: 0 8px 40px rgba(26,18,8,0.08); }
+    .card-header { padding: 24px 28px 0; display: flex; align-items: center; gap: 10px; }
+    .card-icon { width: 32px; height: 32px; background: rgba(74,124,53,0.08); border-radius: 8px; display: grid; place-items: center; font-size: 15px; }
+    .card-title { font-size: 13px; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: rgba(26,18,8,0.4); }
+
+    /* Upload */
+    .upload-zone {
+      margin: 20px 28px 28px; border: 2px dashed rgba(74,124,53,0.25);
+      border-radius: 16px; padding: 40px 24px; text-align: center;
+      cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden;
+      background: rgba(74,124,53,0.02);
+    }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: var(--leaf); background: rgba(74,124,53,0.05); }
+    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-icon-wrap { width: 64px; height: 64px; margin: 0 auto 16px; background: linear-gradient(135deg, rgba(74,124,53,0.1), rgba(139,195,74,0.1)); border-radius: 50%; display: grid; place-items: center; font-size: 28px; transition: transform 0.3s; }
+    .upload-zone:hover .upload-icon-wrap { transform: scale(1.1) rotate(-5deg); }
+    .upload-title { font-size: 16px; font-weight: 500; color: var(--soil); margin-bottom: 6px; }
+    .upload-sub { font-size: 13px; color: rgba(26,18,8,0.45); }
+    .upload-formats { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
+    .fmt-tag { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.5px; padding: 3px 8px; border-radius: 4px; background: rgba(74,124,53,0.08); color: var(--leaf); }
+
+    /* Preview */
+    #preview-wrap { margin: 0 28px 0; display: none; }
+    #preview-img { width: 100%; border-radius: 12px; object-fit: cover; max-height: 280px; box-shadow: 0 4px 20px rgba(26,18,8,0.1); }
+    .img-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; margin-bottom: 20px; font-size: 12px; color: rgba(26,18,8,0.45); }
+    .change-btn { font-size: 12px; font-weight: 500; color: var(--leaf); background: none; border: none; cursor: pointer; text-decoration: underline; }
+
+    /* Button */
+    .analyze-btn {
+      width: calc(100% - 56px); margin: 0 28px 28px; padding: 16px;
+      background: linear-gradient(135deg, var(--moss), var(--leaf));
+      color: #fff; border: none; border-radius: 12px;
+      font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; letter-spacing: 0.3px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: all 0.3s; box-shadow: 0 4px 20px rgba(42,61,28,0.2);
+    }
+    .analyze-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(42,61,28,0.3); }
+    .analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; display: none; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results */
+    #results-card { display: none; }
+    .result-top { padding: 28px; display: flex; gap: 20px; align-items: flex-start; }
+    .result-badge { flex-shrink: 0; width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; font-size: 26px; }
+    .result-badge.disease { background: linear-gradient(135deg, rgba(192,57,43,0.1), rgba(192,57,43,0.05)); }
+    .result-badge.healthy { background: linear-gradient(135deg, rgba(74,124,53,0.1), rgba(139,195,74,0.1)); }
+    .result-info { flex: 1; }
+    .result-plant { font-size: 11px; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(26,18,8,0.4); margin-bottom: 4px; }
+    .result-disease { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--soil); line-height: 1.2; margin-bottom: 8px; }
+    .result-conf-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .conf-pill { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; padding: 4px 12px; border-radius: 20px; }
+    .conf-pill.high   { background: rgba(74,124,53,0.1);  color: var(--leaf); }
+    .conf-pill.medium { background: rgba(244,162,40,0.1); color: var(--amber); }
+    .conf-pill.low    { background: rgba(192,57,43,0.1);  color: var(--rust); }
+    .result-status { font-size: 12px; color: rgba(26,18,8,0.4); }
+
+    /* Probability bars */
+    .prob-section { padding: 0 28px 28px; border-top: 1px solid rgba(74,124,53,0.08); }
+    .prob-title { font-size: 11px; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(26,18,8,0.35); padding: 16px 0 12px; }
+    .prob-item { margin-bottom: 14px; }
+    .prob-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .prob-name { font-size: 13px; font-weight: 500; color: var(--soil); max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .prob-pct { font-family: 'DM Mono', monospace; font-size: 12px; color: rgba(26,18,8,0.5); }
+    .prob-bar-bg { height: 6px; background: rgba(74,124,53,0.08); border-radius: 99px; overflow: hidden; }
+    .prob-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--leaf), var(--lime)); width: 0; transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+    .prob-bar-fill.rank2 { background: linear-gradient(90deg, var(--sky), #a8d8ea); }
+    .prob-bar-fill.rank3 { background: linear-gradient(90deg, var(--amber), #f7c96c); }
+    .prob-bar-fill.rank4, .prob-bar-fill.rank5 { background: rgba(26,18,8,0.12); }
+
+    /* Info grid */
+    .info-section { padding: 0 28px 28px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .info-item { background: rgba(74,124,53,0.04); border: 1px solid rgba(74,124,53,0.08); border-radius: 12px; padding: 16px; }
+    .info-item-label { font-size: 10px; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(26,18,8,0.35); margin-bottom: 4px; }
+    .info-item-value { font-size: 14px; font-weight: 500; color: var(--soil); }
+
+    /* How it works */
+    .howto { padding: 0 48px 80px; position: relative; z-index: 5; max-width: 1080px; margin: 0 auto; }
+    .section-label { font-size: 11px; font-weight: 500; letter-spacing: 1.2px; text-transform: uppercase; color: var(--leaf); margin-bottom: 12px; }
+    .section-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: var(--soil); margin-bottom: 40px; letter-spacing: -0.5px; }
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    @media (max-width: 768px) { .steps { grid-template-columns: 1fr 1fr; } .howto { padding: 0 24px 60px; } }
+    .step { background: #fff; border: 1px solid rgba(74,124,53,0.1); border-radius: 16px; padding: 24px; }
+    .step-num { font-family: 'Playfair Display', serif; font-size: 42px; font-weight: 900; color: rgba(74,124,53,0.1); line-height: 1; margin-bottom: 12px; }
+    .step-icon { font-size: 22px; margin-bottom: 10px; }
+    .step-title { font-size: 14px; font-weight: 500; color: var(--soil); margin-bottom: 6px; }
+    .step-desc { font-size: 13px; color: rgba(26,18,8,0.5); line-height: 1.6; }
+
+    /* Supported classes panel */
+    .classes-section { padding: 0 48px 80px; position: relative; z-index: 5; max-width: 1080px; margin: 0 auto; }
+    .classes-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    @media (max-width: 768px) { .classes-grid { grid-template-columns: 1fr 1fr; } .classes-section { padding: 0 24px 60px; } }
+    .class-pill {
+      display: flex; align-items: center; gap: 10px;
+      background: #fff; border: 1px solid rgba(74,124,53,0.1);
+      border-radius: 10px; padding: 12px 16px;
+      font-size: 13px; color: var(--soil);
+    }
+    .class-pill .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-disease { background: var(--rust); }
+    .dot-healthy { background: var(--leaf); }
+
+    /* Footer */
+    footer { position: relative; z-index: 5; border-top: 1px solid rgba(74,124,53,0.1); padding: 24px 48px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: rgba(26,18,8,0.4); }
+    footer strong { color: var(--leaf); }
+    @media (max-width: 768px) { footer { padding: 20px 24px; flex-direction: column; gap: 8px; text-align: center; } }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--soil); color: #fff; font-size: 13px; padding: 12px 20px; border-radius: 10px; z-index: 1000; transition: transform 0.3s; box-shadow: 0 8px 30px rgba(26,18,8,0.25); pointer-events: none; }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.error { background: var(--rust); }
+
+    /* Animations */
+    .fade-in { opacity: 0; transform: translateY(20px); animation: fadeIn 0.6s ease forwards; }
+    @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+    .fade-in:nth-child(1) { animation-delay: 0.1s; }
+    .fade-in:nth-child(2) { animation-delay: 0.2s; }
+    .fade-in:nth-child(3) { animation-delay: 0.3s; }
+    .fade-in:nth-child(4) { animation-delay: 0.4s; }
+  </style>
+</head>
+<body>
+
+<div class="bg-canvas"></div>
+<div class="leaf-deco one">🌿</div>
+<div class="leaf-deco two">🍃</div>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🌱</div>
+    <div class="logo-text">Plant<span>Care</span> AI</div>
+  </div>
+  <nav>
+    <a href="#upload">Diagnose</a>
+    <a href="#howto">How It Works</a>
+    <a href="#classes">Supported Diseases</a>
+  </nav>
+  <div class="badge-demo" id="demo-badge">Demo Mode</div>
+  <div class="badge-live" id="live-badge">Live Model</div>
+</header>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-tag">AI-Powered Agriculture</div>
+  <h1>Detect Plant<br><em>Diseases</em> Instantly</h1>
+  <p class="hero-sub">
+    Upload a leaf photo and our fine-tuned MobileNetV2 model — trained on 20,638 real plant images —
+    will identify diseases across 15 classes in under a second.
+  </p>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-num">15</div><div class="stat-label">Disease Classes</div></div>
+    <div class="stat"><div class="stat-num">20K+</div><div class="stat-label">Training Images</div></div>
+    <div class="stat"><div class="stat-num">96%+</div><div class="stat-label">Val Accuracy</div></div>
+    <div class="stat"><div class="stat-num">&lt;1s</div><div class="stat-label">Inference Time</div></div>
+  </div>
+</section>
+
+<!-- Main Cards -->
+<div class="main-container" id="upload">
+
+  <!-- Upload Card -->
+  <div class="card fade-in">
+    <div class="card-header">
+      <div class="card-icon">📷</div>
+      <div class="card-title">Upload Leaf Image</div>
+    </div>
+
+    <div class="upload-zone" id="drop-zone">
+      <input type="file" id="file-input" accept="image/*" />
+      <div class="upload-icon-wrap">🍃</div>
+      <div class="upload-title">Drop your leaf image here</div>
+      <div class="upload-sub">or click to browse files</div>
+      <div class="upload-formats">
+        <span class="fmt-tag">JPG</span>
+        <span class="fmt-tag">PNG</span>
+        <span class="fmt-tag">WEBP</span>
+      </div>
+    </div>
+
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt="Uploaded leaf" />
+      <div class="img-meta">
+        <span id="img-filename">image.jpg</span>
+        <button class="change-btn" onclick="resetUpload()">Change image</button>
+      </div>
+    </div>
+
+    <button class="analyze-btn" id="analyze-btn" disabled onclick="runAnalysis()">
+      <div class="spinner" id="spinner"></div>
+      <span id="btn-text">🔬 Analyze Plant</span>
+    </button>
+  </div>
+
+  <!-- Results Card -->
+  <div class="card fade-in" id="results-card">
+    <div class="card-header">
+      <div class="card-icon">📊</div>
+      <div class="card-title">Diagnostic Results</div>
+    </div>
+    <div class="result-top">
+      <div class="result-badge disease" id="result-badge">🦠</div>
+      <div class="result-info">
+        <div class="result-plant" id="result-plant">—</div>
+        <div class="result-disease" id="result-disease">—</div>
+        <div class="result-conf-row">
+          <div class="conf-pill high" id="conf-pill">—</div>
+          <div class="result-status" id="result-status">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="info-section">
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-item-label">Plant Type</div>
+          <div class="info-item-value" id="info-plant">—</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">Condition</div>
+          <div class="info-item-value" id="info-condition">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="prob-section">
+      <div class="prob-title">Top Predictions</div>
+      <div id="prob-bars"></div>
+    </div>
+  </div>
+
+  <!-- Placeholder -->
+  <div class="card fade-in" id="placeholder-card">
+    <div style="padding:60px 28px;text-align:center;">
+      <div style="font-size:56px;margin-bottom:16px;opacity:0.3;">🌾</div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--soil);margin-bottom:8px;opacity:0.5;">Awaiting Analysis</div>
+      <div style="font-size:13px;color:rgba(26,18,8,0.35);line-height:1.6;">Upload a plant leaf image to<br>receive your AI diagnosis</div>
+    </div>
+  </div>
+</div>
+
+<!-- How It Works -->
+<section class="howto" id="howto">
+  <div class="section-label">Methodology</div>
+  <div class="section-title">How PlantCare AI Works</div>
+  <div class="steps">
+    <div class="step fade-in">
+      <div class="step-num">01</div>
+      <div class="step-icon">📸</div>
+      <div class="step-title">Image Upload</div>
+      <div class="step-desc">Capture or upload a clear photo of the affected plant leaf. Supports JPG, PNG, and WEBP formats up to 16MB.</div>
+    </div>
+    <div class="step fade-in">
+      <div class="step-num">02</div>
+      <div class="step-icon">⚙️</div>
+      <div class="step-title">Preprocessing</div>
+      <div class="step-desc">The image is resized to 224×224px and normalized using MobileNetV2 preprocessing to match training conditions exactly.</div>
+    </div>
+    <div class="step fade-in">
+      <div class="step-num">03</div>
+      <div class="step-icon">🧠</div>
+      <div class="step-title">Deep Learning</div>
+      <div class="step-desc">Our fine-tuned MobileNetV2 analyzes visual patterns across 15 disease classes using two-phase transfer learning.</div>
+    </div>
+    <div class="step fade-in">
+      <div class="step-num">04</div>
+      <div class="step-icon">📋</div>
+      <div class="step-title">Diagnosis</div>
+      <div class="step-desc">Top-5 predictions with confidence scores help you identify diseases quickly and take the right action.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Supported Disease Classes -->
+<section class="classes-section" id="classes">
+  <div class="section-label">Coverage</div>
+  <div class="section-title">15 Supported Plant Conditions</div>
+  <div class="classes-grid">
+    <div class="class-pill"><div class="dot dot-disease"></div>Pepper — Bacterial Spot</div>
+    <div class="class-pill"><div class="dot dot-healthy"></div>Pepper — Healthy</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Potato — Early Blight</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Potato — Late Blight</div>
+    <div class="class-pill"><div class="dot dot-healthy"></div>Potato — Healthy</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Bacterial Spot</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Early Blight</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Late Blight</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Leaf Mold</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Septoria Leaf Spot</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Spider Mites</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Target Spot</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Yellow Leaf Curl Virus</div>
+    <div class="class-pill"><div class="dot dot-disease"></div>Tomato — Mosaic Virus</div>
+    <div class="class-pill"><div class="dot dot-healthy"></div>Tomato — Healthy</div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div>Trained with <strong>MobileNetV2</strong> + Transfer Learning · 20,638 images · 96%+ accuracy</div>
+  <div>PlantCare AI • Deep Learning for Agriculture</div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const fileInput   = document.getElementById('file-input');
+  const dropZone    = document.getElementById('drop-zone');
+  const previewWrap = document.getElementById('preview-wrap');
+  const previewImg  = document.getElementById('preview-img');
+  const analyzeBtn  = document.getElementById('analyze-btn');
+  const btnText     = document.getElementById('btn-text');
+  const spinner     = document.getElementById('spinner');
+  const resultsCard = document.getElementById('results-card');
+  const placeholder = document.getElementById('placeholder-card');
+  let selectedFile  = null;
+
+  // File selection
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+  // Drag & drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('image/')) handleFile(f);
+    else showToast('Please drop an image file', true);
+  });
+
+  function handleFile(file) {
+    selectedFile = file;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      previewImg.src = ev.target.result;
+      dropZone.style.display = 'none';
+      previewWrap.style.display = 'block';
+      document.getElementById('img-filename').textContent = file.name;
+      analyzeBtn.disabled = false;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function resetUpload() {
+    selectedFile = null; fileInput.value = '';
+    dropZone.style.display = 'block'; previewWrap.style.display = 'none';
+    analyzeBtn.disabled = true; resultsCard.style.display = 'none'; placeholder.style.display = 'block';
+  }
+
+  // Run analysis
+  async function runAnalysis() {
+    if (!selectedFile) return;
+    analyzeBtn.disabled = true; btnText.textContent = 'Analyzing…'; spinner.style.display = 'block';
+    const form = new FormData();
+    form.append('file', selectedFile);
+    try {
+      const res  = await fetch('/predict', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Prediction failed');
+      renderResults(data);
+    } catch (err) {
+      showToast('Error: ' + err.message, true);
+    } finally {
+      analyzeBtn.disabled = false;
+      btnText.textContent = '🔬 Analyze Again';
+      spinner.style.display = 'none';
+    }
+  }
+
+  // Render results
+  function renderResults(data) {
+    const top   = data.predictions[0];
+    const preds = data.predictions;
+
+    placeholder.style.display = 'none';
+    resultsCard.style.display = 'block';
+
+    const badge = document.getElementById('result-badge');
+    badge.textContent = top.is_healthy ? '✅' : '🦠';
+    badge.className   = 'result-badge ' + (top.is_healthy ? 'healthy' : 'disease');
+
+    document.getElementById('result-plant').textContent   = top.plant;
+    document.getElementById('result-disease').textContent = top.disease;
+    document.getElementById('info-plant').textContent     = top.plant;
+    document.getElementById('info-condition').textContent = top.is_healthy ? '🌿 Healthy' : '⚠️ Disease Detected';
+
+    const pill = document.getElementById('conf-pill');
+    pill.textContent = top.confidence.toFixed(1) + '% confidence';
+    pill.className   = 'conf-pill ' + (top.confidence >= 70 ? 'high' : top.confidence >= 40 ? 'medium' : 'low');
+    document.getElementById('result-status').textContent = top.is_healthy ? 'No disease detected' : 'Treatment recommended';
+
+    // Probability bars
+    const barsEl = document.getElementById('prob-bars');
+    barsEl.innerHTML = '';
+    preds.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = 'prob-item';
+      div.innerHTML = `
+        <div class="prob-row">
+          <div class="prob-name">${p.plant} — ${p.disease}</div>
+          <div class="prob-pct">${p.confidence.toFixed(1)}%</div>
+        </div>
+        <div class="prob-bar-bg">
+          <div class="prob-bar-fill rank${i+1}" id="bar-${i}" style="width:0%"></div>
+        </div>`;
+      barsEl.appendChild(div);
+    });
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      preds.forEach((p, i) => {
+        const el = document.getElementById('bar-' + i);
+        if (el) el.style.width = Math.min(p.confidence, 100) + '%';
+      });
+    }));
+
+    resultsCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function showToast(msg, isError = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : '') + ' show';
+    setTimeout(() => t.classList.remove('show'), 3500);
+  }
+</script>
+
+</body>
+</html>
